@@ -30,6 +30,12 @@ def get_datapackage_collection_id():
     d = dict_from_query(sql)
     return d['collection_id']
 
+def get_datafile_collection_id():
+    sql = "select collection_id from collection where name = 'Dryad Data Files'"
+    d = dict_from_query(sql)
+    return d['collection_id']
+
+
 def get_metadata_field_id(schema_id, element, qualifier=None):
     if qualifier is None:
         qualifier_clause = "qualifier is null"
@@ -109,11 +115,86 @@ def print_top_authors():
         for d in distribution:
             print '%s - %s' % (d['packages'], d['author'])
 
+def get_items_submitted(year, collection_id):
+    dc_schema_id = get_dc_schema_id()
+    date_accessioned_metadata_field_id = get_metadata_field_id(dc_schema_id,'date','accessioned')
+
+    sql = "select count(*) as items_submitted from collection2item where collection_id = %s and item_id in (" \
+          "select item_id from metadatavalue where metadata_field_id = %s and text_value like '%d-%%')" % \
+          (collection_id, date_accessioned_metadata_field_id, year)
+    d = dict_from_query(sql)
+    return d['items_submitted']
+
+def get_items_submitted_before(year, collection_id):
+    before_date = "%d-01-01" % (year + 1)
+    dc_schema_id = get_dc_schema_id()
+    date_accessioned_metadata_field_id = get_metadata_field_id(dc_schema_id,'date','accessioned')
+
+    sql = "select count(*) as items_submitted from collection2item where collection_id = %s and item_id in (" \
+          "select item_id from metadatavalue where metadata_field_id = %s and text_value < '%s')" % \
+          (collection_id, date_accessioned_metadata_field_id, before_date)
+    d = dict_from_query(sql)
+    return d['items_submitted']
+
+def get_packages_submitted(year):
+    collection_id = get_datapackage_collection_id()
+    return get_items_submitted(year, collection_id)
+
+def get_packages_submitted_before(year):
+    collection_id = get_datapackage_collection_id()
+    return get_items_submitted_before(year, collection_id)
+
+def get_files_submitted(year):
+    collection_id = get_datafile_collection_id()
+    return get_items_submitted(year, collection_id)
+
+def get_files_submitted_before(year):
+    collection_id = get_datafile_collection_id()
+    return get_items_submitted_before(year, collection_id)
+
+def get_totalsize_files(year):
+    collection_id = get_datafile_collection_id()
+    dc_schema_id = get_dc_schema_id()
+    date_accessioned_metadata_field_id = get_metadata_field_id(dc_schema_id,'date','accessioned')
+
+    sql = "select sum(size_bytes) as total_size from bitstream where bitstream_id in (" \
+          "select bitstream_id from bundle2bitstream where bundle_id in(" \
+          "select bundle_id from item2bundle where item_id in (" \
+          "select item_id " \
+          "from collection2item where collection_id = %s and item_id in (" \
+          "select item_id from metadatavalue where metadata_field_id = %s and text_value like '%d-%%'))))" % \
+          (collection_id, date_accessioned_metadata_field_id, year)
+    d = dict_from_query(sql)
+    return d['total_size']
+
+def get_totalsize_files_before(year):
+    before_date = "%d-01-01" % (year + 1)
+    collection_id = get_datafile_collection_id()
+    dc_schema_id = get_dc_schema_id()
+    date_accessioned_metadata_field_id = get_metadata_field_id(dc_schema_id,'date','accessioned')
+
+    sql = "select sum(size_bytes) as total_size from bitstream where bitstream_id in (" \
+          "select bitstream_id from bundle2bitstream where bundle_id in(" \
+          "select bundle_id from item2bundle where item_id in (" \
+          "select item_id " \
+          "from collection2item where collection_id = %s and item_id in (" \
+          "select item_id from metadatavalue where metadata_field_id = %s and text_value < '%s'))))" % \
+          (collection_id, date_accessioned_metadata_field_id, before_date)
+    d = dict_from_query(sql)
+    return d['total_size']
+
+
 def main(year):
     print "Authors associated with submissions in %d: %s" % (year, get_author_count(year))
     print "Total authors represented in Dryad: %s" % get_total_authors_represented()
     print "Total accounts: %s" % get_total_accounts()
     print "Accounts created in %d: %s" % (year, get_accounts_created(year))
+    print "Packages submitted in %d: %s" % (year, get_packages_submitted(year))
+    print "Packages submitted by end of %d: %s" % (year, get_packages_submitted_before(year))
+    print "Files submitted in %d: %s" % (year, get_files_submitted(year))
+    print "Files submitted by end of %d: %s" % (year, get_files_submitted_before(year))
+    print "Files total size in %d: %s" % (year, get_totalsize_files(year))
+    print "Files total size by end of %d: %s" % (year, get_totalsize_files_before(year))
     print "Top authors by package count: "
     print_top_authors()
 
